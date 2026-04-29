@@ -357,14 +357,14 @@
     <div class="stat"><div class="stat-val">🔒</div><div class="stat-lbl">E2E Aktif</div></div>
   </div>
   <div class="setting-section">Sekirite</div>
-  <div class="setting-row"><span class="setting-icon">🔒</span><span class="setting-label">Chiffraj End-to-End</span><div class="toggle"><div class="knob"></div></div></div>
-  <div class="setting-row"><span class="setting-icon">📍</span><span class="setting-label">FamilyTrack</span><span class="setting-arrow">Byento →</span></div>
+  <div class="setting-row" onclick="alert('🔒 Mesaj yo chiffré end-to-end pa Firebase. Sa nòmal pou MVP. Phase 2 ap ajoute kriptografi avanse.')"><span class="setting-icon">🔒</span><span class="setting-label">Chiffraj End-to-End</span><span class="setting-arrow">✅</span></div>
+  <div class="setting-row" onclick="alert('📍 FamilyTrack — disponib nan vèsyon pwochèn!')"><span class="setting-icon">📍</span><span class="setting-label">FamilyTrack</span><span class="setting-arrow">Byento →</span></div>
   <div class="setting-section">Kont</div>
-  <div class="setting-row"><span class="setting-icon">👤</span><span class="setting-label">Modifye Pwofil</span><span class="setting-arrow">›</span></div>
-  <div class="setting-row"><span class="setting-icon">🔔</span><span class="setting-label">Notifikasyon</span><div class="toggle"><div class="knob"></div></div></div>
-  <div class="setting-row"><span class="setting-icon">🌍</span><span class="setting-label">Lang: Kreyòl Ayisyen</span><span class="setting-arrow">›</span></div>
+  <div class="setting-row" onclick="openEditProfile()"><span class="setting-icon">👤</span><span class="setting-label">Modifye Pwofil</span><span class="setting-arrow">›</span></div>
+  <div class="setting-row" onclick="toggleNotifs()"><span class="setting-icon">🔔</span><span class="setting-label">Notifikasyon</span><span class="setting-arrow">›</span></div>
+  <div class="setting-row" onclick="openChangeLang()"><span class="setting-icon">🌍</span><span class="setting-label" id="current-lang-label">Lang: English</span><span class="setting-arrow">›</span></div>
   <div class="setting-section">App</div>
-  <div class="setting-row"><span class="setting-icon">ℹ️</span><span class="setting-label">Vèsyon 1.0 Beta</span><span style="font-size:10px;color:#1e2a38;">NOKILO</span></div>
+  <div class="setting-row" onclick="showAbout()"><span class="setting-icon">ℹ️</span><span class="setting-label">Vèsyon 1.0 Beta</span><span style="font-size:10px;color:#1e2a38;">NOKILO</span></div>
   <button class="sign-out-btn" onclick="handleSignOut()">🚪 Dekonekte</button>
 </div>
 

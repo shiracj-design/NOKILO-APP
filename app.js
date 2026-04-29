@@ -1,7 +1,6 @@
 
 // ════════════════════════════════════════════════
-// NOKILO APP — Main JavaScript
-// Replace FIREBASE_CONFIG with your own config
+// NOKILO APP — Main JavaScript (FIXED v2)
 // ════════════════════════════════════════════════
 
 const FIREBASE_CONFIG = {
@@ -13,10 +12,9 @@ const FIREBASE_CONFIG = {
   appId: "1:1047328392598:web:ab77119ce3a5e997e1c9b7"
 };
 
-// ── Firebase init ──────────────────────────────
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged, updateProfile }
+  signOut, onAuthStateChanged, updateProfile, sendEmailVerification }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot,
   doc, setDoc, getDoc, getDocs, serverTimestamp, where, limit, updateDoc }
@@ -26,19 +24,16 @@ const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// ── State ──────────────────────────────────────
 let currentUser  = null;
 let activeChat   = null;
 let unsubChat    = null;
 let unsubConv    = null;
 
-// ── Screen router ──────────────────────────────
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
-// ── Format timestamp ──────────────────────────
 function fmtTime(ts) {
   if (!ts) return '';
   const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -50,7 +45,6 @@ function fmtTime(ts) {
   return d.toLocaleDateString('fr',{day:'numeric',month:'short'});
 }
 
-// ── Avatar colors ─────────────────────────────
 const AV_COLORS = [
   ['#0f2044','#1a3a6e'],['#0f766e','#059669'],['#1e3a8a','#3b82f6'],
   ['#78350f','#d97706'],['#4c1d95','#7c3aed'],['#881337','#e11d48'],
@@ -67,9 +61,6 @@ function avEl(uid, name, sz=44, grp=false) {
   return `<div class="av${grp?' av-grp':''}" style="width:${sz}px;height:${sz}px;background:linear-gradient(135deg,${g1},${g2});font-size:${Math.round(sz*.34)}px;">${avInitials(name)}</div>`;
 }
 
-// ════════════════════════════════════════════════
-// SPLASH → Auth check
-// ════════════════════════════════════════════════
 setTimeout(() => {
   onAuthStateChanged(auth, user => {
     if (user) {
@@ -81,9 +72,6 @@ setTimeout(() => {
   });
 }, 1800);
 
-// ════════════════════════════════════════════════
-// AUTH — Register / Login
-// ════════════════════════════════════════════════
 let authMode = 'login';
 
 function setAuthMode(mode) {
@@ -106,7 +94,8 @@ function showErr(msg) {
 }
 
 async function handleAuth() {
-  const email = document.getElementById('auth-email').value.trim();
+  // FIX: Always lowercase email
+  const email = document.getElementById('auth-email').value.trim().toLowerCase();
   const pass  = document.getElementById('auth-pass').value;
   const name  = document.getElementById('reg-name')?.value?.trim();
   if (!email || !pass) { showErr('Tanpri ranpli tout chan yo.'); return; }
@@ -118,14 +107,22 @@ async function handleAuth() {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
       await updateProfile(cred.user, { displayName: name });
       await setDoc(doc(db,'users',cred.user.uid), {
-        name, email, uid: cred.user.uid,
-        createdAt: serverTimestamp(), online: true,
+        name,
+        email: email,
+        emailLower: email,
+        uid: cred.user.uid,
+        createdAt: serverTimestamp(),
+        online: true,
       });
+      try { await sendEmailVerification(cred.user); } catch(e) {}
       currentUser = cred.user;
     } else {
       const cred = await signInWithEmailAndPassword(auth, email, pass);
       currentUser = cred.user;
-      await updateDoc(doc(db,'users',currentUser.uid), { online: true });
+      await updateDoc(doc(db,'users',currentUser.uid), {
+        online: true,
+        emailLower: email
+      }).catch(()=>{});
     }
     loadHome();
   } catch(e) {
@@ -143,9 +140,6 @@ async function handleAuth() {
   }
 }
 
-// ════════════════════════════════════════════════
-// HOME — Chat list
-// ════════════════════════════════════════════════
 async function loadHome() {
   show('home');
   updateProfileUI();
@@ -157,7 +151,6 @@ function listenChats() {
   const list = document.getElementById('chat-list');
   list.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
 
-  // Listen to conversations where user is a member
   const q = query(
     collection(db,'conversations'),
     where('members','array-contains', currentUser.uid),
@@ -200,16 +193,35 @@ function listenChats() {
   }, err => console.error('chats err', err));
 }
 
-// ── New chat dialog ────────────────────────────
 async function newChat() {
-  const email = prompt('📧 Imèl moun ou vle kominike ak li:');
-  if (!email) return;
+  const emailInput = prompt('📧 Imèl moun ou vle kominike ak li:');
+  if (!emailInput) return;
+  const email = emailInput.trim().toLowerCase();
+
   try {
-    const q = query(collection(db,'users'), where('email','==',email.trim()), limit(1));
-    const snap = await getDocs(q);
-    if (snap.empty) { alert('Moun sa pa nan NOKILO ankò.'); return; }
+    let snap = await getDocs(query(
+      collection(db,'users'),
+      where('emailLower','==', email),
+      limit(1)
+    ));
+
+    if (snap.empty) {
+      snap = await getDocs(query(
+        collection(db,'users'),
+        where('email','==', email),
+        limit(1)
+      ));
+    }
+
+    if (snap.empty) {
+      alert('❌ Moun sa poko nan NOKILO.\n\nDi yo ale sou nokilo.app pou yo kreye kont la.');
+      return;
+    }
     const other = snap.docs[0];
-    if (other.id === currentUser.uid) { alert('Sa se ou menm!'); return; }
+    if (other.id === currentUser.uid) {
+      alert('🤔 Sa se imèl ou menm! Eseye yon lòt moun.');
+      return;
+    }
     const convId = [currentUser.uid, other.id].sort().join('_');
     const ref = doc(db,'conversations',convId);
     const existing = await getDoc(ref);
@@ -221,25 +233,24 @@ async function newChat() {
           [other.id]: other.data().name || 'Moun'
         },
         isGroup: false,
-        lastMsg: '', lastAt: serverTimestamp(),
+        lastMsg: '',
+        lastAt: serverTimestamp(),
         unread: { [currentUser.uid]: 0, [other.id]: 0 },
       });
     }
     openChat(convId, other.id, other.data().name || 'Moun');
-  } catch(e) { alert('Erè: '+e.message); }
+  } catch(e) {
+    console.error(e);
+    alert('Erè: '+e.message);
+  }
 }
 
-// ════════════════════════════════════════════════
-// CONVERSATION
-// ════════════════════════════════════════════════
 function openChat(convId, otherId, otherName) {
   activeChat = { convId, otherId, otherName };
   show('conv');
   document.getElementById('conv-name').textContent = otherName;
-  document.getElementById('conv-av').innerHTML =
-    avEl(otherId, otherName, 36);
+  document.getElementById('conv-av').innerHTML = avEl(otherId, otherName, 36);
   loadMessages(convId);
-  // Reset unread
   const ref = doc(db,'conversations',convId);
   updateDoc(ref, { [`unread.${currentUser.uid}`]: 0 }).catch(()=>{});
 }
@@ -260,15 +271,16 @@ function loadMessages(convId) {
       : snap.docs.map(d => {
           const m = d.data();
           const out = m.uid === currentUser.uid;
+          const safeText = (m.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
           return `<div class="msg ${out?'out':'in'}">
-            <div class="msg-bubble">${m.text}</div>
+            <div class="msg-bubble">${safeText}</div>
             <div class="msg-time">${fmtTime(m.at)}</div>
           </div>`;
         }).join('');
     if (wasAtBottom || snap.docs.length < 5) {
       container.scrollTop = container.scrollHeight;
     }
-  });
+  }, err => console.error('messages err', err));
 }
 
 async function sendMessage() {
@@ -281,18 +293,23 @@ async function sendMessage() {
   const senderName = currentUser.displayName || 'Mwen';
   try {
     await addDoc(collection(db,'conversations',convId,'messages'), {
-      text, uid: currentUser.uid, name: senderName, at: serverTimestamp(),
+      text,
+      uid: currentUser.uid,
+      name: senderName,
+      at: serverTimestamp(),
     });
     await updateDoc(doc(db,'conversations',convId), {
-      lastMsg: text, lastAt: serverTimestamp(),
+      lastMsg: text.length > 50 ? text.substring(0,50)+'...' : text,
+      lastAt: serverTimestamp(),
       [`unread.${otherId}`]: 999,
     });
-  } catch(e) { console.error('send error', e); input.value = text; }
+  } catch(e) {
+    console.error('send error', e);
+    input.value = text;
+    alert('Mesaj la pa voye. Eseye ankò.');
+  }
 }
 
-// ════════════════════════════════════════════════
-// PROFILE
-// ════════════════════════════════════════════════
 function updateProfileUI() {
   if (!currentUser) return;
   const name = currentUser.displayName || 'Itilizatè';
@@ -301,6 +318,13 @@ function updateProfileUI() {
     `<div class="av" style="width:54px;height:54px;background:linear-gradient(135deg,${g1},${g2});font-size:18px;">${avInitials(name)}</div>`;
   document.getElementById('prof-name').textContent = name;
   document.getElementById('prof-email').textContent = currentUser.email;
+
+  const langCode = localStorage.getItem('nokilo_lang') || 'en';
+  const langObj = LANGS.find(l => l.code === langCode);
+  const langLabel = document.getElementById('current-lang-label');
+  if (langLabel && langObj) {
+    langLabel.textContent = 'Lang: ' + langObj.native;
+  }
 }
 
 async function handleSignOut() {
@@ -315,12 +339,49 @@ async function handleSignOut() {
   show('auth');
 }
 
-// ── Keyboard shortcuts ────────────────────────
+// FIX: Settings actions
+function openEditProfile() {
+  const newName = prompt('Nouvo non ou:', currentUser.displayName || '');
+  if (!newName || !newName.trim()) return;
+  updateProfile(currentUser, { displayName: newName.trim() })
+    .then(() => updateDoc(doc(db,'users',currentUser.uid), { name: newName.trim() }))
+    .then(() => { alert('✅ Non chanje!'); updateProfileUI(); })
+    .catch(e => alert('Erè: '+e.message));
+}
+
+function openChangeLang() {
+  if (!confirm('Chanje lang app la? Ou pral retounen nan ekran chwa lang.')) return;
+  localStorage.removeItem('nokilo_lang');
+  selectedLang = null;
+  document.querySelectorAll('.lang-item.selected').forEach(el => el.classList.remove('selected'));
+  document.getElementById('lang-continue-btn').classList.remove('ready');
+  show('lang');
+  initLangScreen();
+}
+
+function toggleNotifs() {
+  if (!('Notification' in window)) {
+    alert('Telefòn ou pa sipòte notifikasyon.');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    alert('✅ Notifikasyon yo aktive.');
+  } else {
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') alert('✅ Notifikasyon aktive!');
+      else alert('❌ Notifikasyon pa aktive.');
+    });
+  }
+}
+
+function showAbout() {
+  alert('NOKILO v1.0 Beta\n\n🌍 App kominikasyon global\n🇭🇹 Made by Shirac Enterprise LLC\n\nMèsi pou ou eseye li!\n\nVoye nou yon imèl si ou wè bug:\nshiracj@gmail.com');
+}
+
 document.getElementById('msg-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-// ── Expose to HTML ────────────────────────────
 window.setAuthMode  = setAuthMode;
 window.handleAuth   = handleAuth;
 window.newChat      = newChat;
@@ -332,29 +393,31 @@ window.loadHome     = loadHome;
 window.selectLang   = selectLang;
 window.filterLangs  = filterLangs;
 window.confirmLang  = confirmLang;
+window.openEditProfile = openEditProfile;
+window.openChangeLang  = openChangeLang;
+window.toggleNotifs    = toggleNotifs;
+window.showAbout       = showAbout;
+window.updateProfileUI = updateProfileUI;
 
-
-
-// ════════════════════════════════════════════════
-// LANGUAGE SELECTION
-// ════════════════════════════════════════════════
 const LANGS = [{"code":"en","name":"English","native":"English","flag":"🇺🇸"},{"code":"ht","name":"Haitian Creole","native":"Kreyòl Ayisyen","flag":"🇭🇹"},{"code":"fr","name":"French","native":"Français","flag":"🇫🇷"},{"code":"es","name":"Spanish","native":"Español","flag":"🇪🇸"},{"code":"pt","name":"Portuguese","native":"Português","flag":"🇧🇷"},{"code":"ar","name":"Arabic","native":"العربية","flag":"🇸🇦"},{"code":"zh","name":"Chinese","native":"中文","flag":"🇨🇳"},{"code":"hi","name":"Hindi","native":"हिन्दी","flag":"🇮🇳"},{"code":"ru","name":"Russian","native":"Русский","flag":"🇷🇺"},{"code":"de","name":"German","native":"Deutsch","flag":"🇩🇪"},{"code":"it","name":"Italian","native":"Italiano","flag":"🇮🇹"},{"code":"ja","name":"Japanese","native":"日本語","flag":"🇯🇵"},{"code":"ko","name":"Korean","native":"한국어","flag":"🇰🇷"},{"code":"sw","name":"Swahili","native":"Kiswahili","flag":"🇰🇪"},{"code":"yo","name":"Yoruba","native":"Yorùbá","flag":"🇳🇬"},{"code":"am","name":"Amharic","native":"አማርኛ","flag":"🇪🇹"},{"code":"nl","name":"Dutch","native":"Nederlands","flag":"🇳🇱"},{"code":"pl","name":"Polish","native":"Polski","flag":"🇵🇱"},{"code":"tr","name":"Turkish","native":"Türkçe","flag":"🇹🇷"},{"code":"vi","name":"Vietnamese","native":"Tiếng Việt","flag":"🇻🇳"}];
 const LOCALE_MAP = {"en":"en","en-US":"en","en-GB":"en","en-CA":"en","en-AU":"en","fr":"fr","fr-FR":"fr","fr-CA":"fr","fr-BE":"fr","fr-CH":"fr","ht":"ht","ht-HT":"ht","es":"es","es-ES":"es","es-MX":"es","es-AR":"es","es-CO":"es","pt":"pt","pt-BR":"pt","pt-PT":"pt","ar":"ar","ar-SA":"ar","ar-EG":"ar","zh":"zh","zh-CN":"zh","zh-TW":"zh","zh-HK":"zh","hi":"hi","hi-IN":"hi","ru":"ru","ru-RU":"ru","de":"de","de-DE":"de","de-AT":"de","de-CH":"de","it":"it","it-IT":"it","ja":"ja","ja-JP":"ja","ko":"ko","ko-KR":"ko","sw":"sw","sw-KE":"sw","sw-TZ":"sw","yo":"yo","yo-NG":"yo","am":"am","am-ET":"am","nl":"nl","nl-NL":"nl","nl-BE":"nl","pl":"pl","pl-PL":"pl","tr":"tr","tr-TR":"tr","vi":"vi","vi-VN":"vi"};
 
 let selectedLang = null;
 
-// Detect browser language
+// FIX: Better language detection
 function detectLang() {
-  const nav = navigator.language || navigator.userLanguage || 'en';
-  // Try exact match, then just language part
-  return LOCALE_MAP[nav] || LOCALE_MAP[nav.split('-')[0]] || null;
+  const langs = navigator.languages || [navigator.language || navigator.userLanguage || 'en'];
+  for (const nav of langs) {
+    if (LOCALE_MAP[nav]) return LOCALE_MAP[nav];
+    const short = nav.split('-')[0];
+    if (LOCALE_MAP[short]) return LOCALE_MAP[short];
+  }
+  return 'en';
 }
 
-// Called right after splash
 function initLangScreen() {
   const saved = localStorage.getItem('nokilo_lang');
   if (saved) {
-    // Already chose a language — go straight to auth
     applyLang(saved);
     return;
   }
@@ -362,20 +425,17 @@ function initLangScreen() {
   const detected = detectLang();
   if (detected) {
     selectLang(detected);
-    // Show detected badge
     const langObj = LANGS.find(l => l.code === detected);
     if (langObj) {
       const badge = document.getElementById('detected-badge');
-      document.getElementById('detected-txt').textContent =
-        langObj.flag + '  ' + langObj.native + ' detected from your device';
-      badge.style.display = 'inline-flex';
+      const txt = document.getElementById('detected-txt');
+      if (txt) txt.textContent = langObj.flag + '  ' + langObj.native + ' detected';
+      if (badge) badge.style.display = 'inline-flex';
     }
-    // If English detected — auto scroll to top (already there), no need to force skip
   }
 
   show('lang');
 
-  // Scroll to detected lang
   if (detected) {
     setTimeout(() => {
       const el = document.getElementById('li-' + detected);
@@ -385,7 +445,6 @@ function initLangScreen() {
 }
 
 function selectLang(code) {
-  // Deselect previous
   if (selectedLang) {
     document.getElementById('li-' + selectedLang)?.classList.remove('selected');
   }
@@ -409,8 +468,6 @@ function confirmLang() {
 }
 
 function applyLang(code) {
-  // Store globally
   window.NOKILO_LANG = code;
-  // For now we go to auth — future: swap UI strings by lang
   show('auth');
 }
