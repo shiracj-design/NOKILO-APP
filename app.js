@@ -62,6 +62,12 @@ function avEl(uid, name, sz=44, grp=false) {
 }
 
 setTimeout(() => {
+  // Apply translations from saved language (or default English)
+  if (typeof applyTranslations === 'function') {
+    window.NOKILO_LANG = localStorage.getItem('nokilo_lang') || 'en';
+    applyTranslations();
+  }
+  
   onAuthStateChanged(auth, user => {
     if (user) {
       currentUser = user;
@@ -81,10 +87,18 @@ function setAuthMode(mode) {
   document.getElementById('auth-tab-login').classList.toggle('off', mode!=='login');
   document.getElementById('auth-tab-reg').classList.toggle('off', mode==='login');
   document.getElementById('reg-fields').style.display = mode==='register' ? 'block' : 'none';
-  document.getElementById('auth-title').textContent = mode==='login' ? 'Konekte' : 'Kreye Kont';
-  document.getElementById('auth-sub').textContent = mode==='login'
-    ? 'Bon retou sou NOKILO 👋' : 'Rantre nan kominote a kounye a';
-  document.getElementById('auth-btn-txt').textContent = mode==='login' ? 'Konekte' : 'Kreye Kont';
+  
+  // Use translations if available
+  if (typeof t === 'function') {
+    document.getElementById('auth-title').textContent = mode==='login' ? t('auth_login_title') : t('auth_register_title');
+    document.getElementById('auth-sub').innerHTML = mode==='login' ? t('auth_login_sub') : t('auth_register_sub');
+    document.getElementById('auth-btn-txt').textContent = mode==='login' ? t('login') : t('register');
+  } else {
+    document.getElementById('auth-title').textContent = mode==='login' ? 'Konekte' : 'Kreye Kont';
+    document.getElementById('auth-sub').textContent = mode==='login'
+      ? 'Bon retou sou NOKILO 👋' : 'Rantre nan kominote a kounye a';
+    document.getElementById('auth-btn-txt').textContent = mode==='login' ? 'Konekte' : 'Kreye Kont';
+  }
   document.getElementById('auth-err').style.display = 'none';
 }
 
@@ -194,7 +208,7 @@ function listenChats() {
 }
 
 async function newChat() {
-  const emailInput = prompt('📧 Imèl moun ou vle kominike ak li:');
+  const emailInput = prompt('📧 ' + (typeof t === 'function' ? t('new_chat_prompt').replace('📧 ', '') : 'Imèl moun ou vle kominike ak li:'));
   if (!emailInput) return;
   const email = emailInput.trim().toLowerCase();
 
@@ -214,12 +228,12 @@ async function newChat() {
     }
 
     if (snap.empty) {
-      alert('❌ Moun sa poko nan NOKILO.\n\nDi yo ale sou nokilo.app pou yo kreye kont la.');
+      alert(typeof t === 'function' ? t('not_in_nokilo') : '❌ Moun sa poko nan NOKILO.\n\nDi yo ale sou nokilo.app pou yo kreye kont la.');
       return;
     }
     const other = snap.docs[0];
     if (other.id === currentUser.uid) {
-      alert('🤔 Sa se imèl ou menm! Eseye yon lòt moun.');
+      alert(typeof t === 'function' ? t('is_yourself') : '🤔 Sa se imèl ou menm! Eseye yon lòt moun.');
       return;
     }
     const convId = [currentUser.uid, other.id].sort().join('_');
@@ -306,7 +320,7 @@ async function sendMessage() {
   } catch(e) {
     console.error('send error', e);
     input.value = text;
-    alert('Mesaj la pa voye. Eseye ankò.');
+    alert(typeof t === 'function' ? t('msg_failed') : 'Mesaj la pa voye. Eseye ankò.');
   }
 }
 
@@ -328,7 +342,8 @@ function updateProfileUI() {
 }
 
 async function handleSignOut() {
-  if (!confirm('Ou vle dekonekte?')) return;
+  const confirmMsg = typeof t === 'function' ? t('sign_out_confirm') : 'Ou vle dekonekte?';
+  if (!confirm(confirmMsg)) return;
   if (unsubChat) unsubChat();
   if (unsubConv) unsubConv();
   try {
@@ -341,16 +356,20 @@ async function handleSignOut() {
 
 // FIX: Settings actions
 function openEditProfile() {
-  const newName = prompt('Nouvo non ou:', currentUser.displayName || '');
+  const newName = prompt(typeof t === 'function' ? t('edit_name_prompt') : 'Nouvo non ou:', currentUser.displayName || '');
   if (!newName || !newName.trim()) return;
   updateProfile(currentUser, { displayName: newName.trim() })
     .then(() => updateDoc(doc(db,'users',currentUser.uid), { name: newName.trim() }))
-    .then(() => { alert('✅ Non chanje!'); updateProfileUI(); })
-    .catch(e => alert('Erè: '+e.message));
+    .then(() => { 
+      alert(typeof t === 'function' ? t('name_changed') : '✅ Non chanje!'); 
+      updateProfileUI(); 
+    })
+    .catch(e => alert((typeof t === 'function' ? t('err_generic') : 'Erè: ') + e.message));
 }
 
 function openChangeLang() {
-  if (!confirm('Chanje lang app la? Ou pral retounen nan ekran chwa lang.')) return;
+  const confirmMsg = typeof t === 'function' ? t('change_lang_confirm') : 'Chanje lang app la?';
+  if (!confirm(confirmMsg)) return;
   localStorage.removeItem('nokilo_lang');
   selectedLang = null;
   document.querySelectorAll('.lang-item.selected').forEach(el => el.classList.remove('selected'));
@@ -361,21 +380,23 @@ function openChangeLang() {
 
 function toggleNotifs() {
   if (!('Notification' in window)) {
-    alert('Telefòn ou pa sipòte notifikasyon.');
+    alert(typeof t === 'function' ? t('no_notif_support') : 'Telefòn ou pa sipòte notifikasyon.');
     return;
   }
   if (Notification.permission === 'granted') {
-    alert('✅ Notifikasyon yo aktive.');
+    alert(typeof t === 'function' ? t('notif_active') : '✅ Notifikasyon yo aktive.');
   } else {
     Notification.requestPermission().then(p => {
-      if (p === 'granted') alert('✅ Notifikasyon aktive!');
-      else alert('❌ Notifikasyon pa aktive.');
+      if (p === 'granted') alert(typeof t === 'function' ? t('notif_enabled') : '✅ Notifikasyon aktive!');
+      else alert(typeof t === 'function' ? t('notif_denied') : '❌ Notifikasyon pa aktive.');
     });
   }
 }
 
 function showAbout() {
-  alert('NOKILO v1.0 Beta\n\n🌍 App kominikasyon global\n🇭🇹 Made by Shirac Enterprise LLC\n\nMèsi pou ou eseye li!\n\nVoye nou yon imèl si ou wè bug:\nshiracj@gmail.com');
+  const title = typeof t === 'function' ? t('about_title') : 'NOKILO v1.0 Beta';
+  const msg = typeof t === 'function' ? t('about_msg') : '🌍 App kominikasyon global\n\nMèsi pou ou eseye li!';
+  alert(title + '\n\n' + msg);
 }
 
 document.getElementById('msg-input').addEventListener('keydown', e => {
@@ -422,9 +443,13 @@ function initLangScreen() {
     return;
   }
 
+  // Option C: ALWAYS ask user to choose (like WhatsApp)
+  // Show the language picker - do NOT auto-select
+  // Default suggestion is English, scroll to it
+  
+  // Show detected language as a "suggestion" badge
   const detected = detectLang();
   if (detected) {
-    selectLang(detected);
     const langObj = LANGS.find(l => l.code === detected);
     if (langObj) {
       const badge = document.getElementById('detected-badge');
@@ -436,12 +461,11 @@ function initLangScreen() {
 
   show('lang');
 
-  if (detected) {
-    setTimeout(() => {
-      const el = document.getElementById('li-' + detected);
-      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, 300);
-  }
+  // Scroll to English by default (top of list)
+  setTimeout(() => {
+    const el = document.getElementById('li-en');
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 300);
 }
 
 function selectLang(code) {
@@ -469,5 +493,9 @@ function confirmLang() {
 
 function applyLang(code) {
   window.NOKILO_LANG = code;
+  // Apply translations to all elements
+  if (typeof applyTranslations === 'function') {
+    applyTranslations();
+  }
   show('auth');
 }
